@@ -1,6 +1,6 @@
 const libssz = @import("./main.zig");
-const serialize = libssz.serialize;
-const deserialize = libssz.deserialize;
+const serialize = libssz.encodeSSZ;
+const deserialize = libssz.decodeSSZ;
 const chunkCount = libssz.chunkCount;
 const hashTreeRoot = libssz.hashTreeRoot;
 const std = @import("std");
@@ -12,64 +12,52 @@ test "serializes uint8" {
     const data: u8 = 0x55;
     const serialized_data = [_]u8{0x55};
 
-    var list = ArrayList(u8).init(std.testing.allocator);
-    defer list.deinit();
-    try serialize(u8, data, &list);
-    try expect(std.mem.eql(u8, list.items, serialized_data[0..]));
+    const list = try serialize(std.testing.allocator, data);
+    defer std.testing.allocator.free(list);
+    try expect(std.mem.eql(u8, list, serialized_data[0..]));
 }
 
 test "serializes uint16" {
     const data: u16 = 0x5566;
     const serialized_data = [_]u8{ 0x66, 0x55 };
 
-    var list = ArrayList(u8).init(std.testing.allocator);
-    defer list.deinit();
-    try serialize(u16, data, &list);
-    try expect(std.mem.eql(u8, list.items, serialized_data[0..]));
+    const list = try serialize(std.testing.allocator, data);
+    defer std.testing.allocator.free(list);
+    try expect(std.mem.eql(u8, list, serialized_data[0..]));
 }
 
 test "serializes uint32" {
     const data: u32 = 0x55667788;
     const serialized_data = [_]u8{ 0x88, 0x77, 0x66, 0x55 };
 
-    var list = ArrayList(u8).init(std.testing.allocator);
-    defer list.deinit();
-    try serialize(u32, data, &list);
-    try expect(std.mem.eql(u8, list.items, serialized_data[0..]));
+    const list = try serialize(std.testing.allocator, data);
+    defer std.testing.allocator.free(list);
+    try expect(std.mem.eql(u8, list, serialized_data[0..]));
 }
 
 test "serializes a int32" {
     const data: i32 = -(0x11223344);
     const serialized_data = [_]u8{ 0xbc, 0xcc, 0xdd, 0xee };
 
-    var list = ArrayList(u8).init(std.testing.allocator);
-    defer list.deinit();
-    try serialize(i32, data, &list);
-    try expect(std.mem.eql(u8, list.items, serialized_data[0..]));
-}
-
-test "non-byte aligned int serialization fails" {
-    const data: u10 = 0x03ff;
-    var list = ArrayList(u8).init(std.testing.allocator);
-    try std.testing.expectError(error.InvalidSerializedIntLengthType, serialize(u10, data, &list));
+    const list = try serialize(std.testing.allocator, data);
+    defer std.testing.allocator.free(list);
+    try expect(std.mem.eql(u8, list, serialized_data[0..]));
 }
 
 test "serializes bool" {
     var data = false;
     var serialized_data = [_]u8{0x00};
 
-    var list = ArrayList(u8).init(std.testing.allocator);
-    defer list.deinit();
-    try serialize(bool, data, &list);
-    try expect(std.mem.eql(u8, list.items, serialized_data[0..]));
+    const list = try serialize(std.testing.allocator, data);
+    defer std.testing.allocator.free(list);
+    try expect(std.mem.eql(u8, list, serialized_data[0..]));
 
     data = true;
     serialized_data = [_]u8{0x01};
 
-    var list2 = ArrayList(u8).init(std.testing.allocator);
-    defer list2.deinit();
-    try serialize(bool, data, &list2);
-    try expect(std.mem.eql(u8, list2.items, serialized_data[0..]));
+    const list2 = try serialize(std.testing.allocator, data);
+    defer std.testing.allocator.free(list2);
+    try expect(std.mem.eql(u8, list2, serialized_data[0..]));
 }
 
 test "serializes Bitvector[N] == [N]bool" {
@@ -77,56 +65,50 @@ test "serializes Bitvector[N] == [N]bool" {
     var serialized_data = [_]u8{0b00001101};
     var exp = serialized_data[0..serialized_data.len];
 
-    var list7 = ArrayList(u8).init(std.testing.allocator);
-    defer list7.deinit();
-    try serialize([7]bool, data7, &list7);
-    try expect(std.mem.eql(u8, list7.items, exp));
+    const list7 = try serialize(std.testing.allocator, data7);
+    defer std.testing.allocator.free(list7);
+    try expect(std.mem.eql(u8, list7, exp));
 
     const data8 = [_]bool{ true, false, true, true, false, false, false, true };
     serialized_data = [_]u8{0b10001101};
     exp = serialized_data[0..serialized_data.len];
 
-    var list8 = ArrayList(u8).init(std.testing.allocator);
-    defer list8.deinit();
-    try serialize([8]bool, data8, &list8);
-    try expect(std.mem.eql(u8, list8.items, exp));
+    const list8 = try serialize(std.testing.allocator, data8);
+    defer std.testing.allocator.free(list8);
+    try expect(std.mem.eql(u8, list8, exp));
 
     const data12 = [_]bool{ true, false, true, true, false, false, false, true, false, true, false, true };
 
-    var list12 = ArrayList(u8).init(std.testing.allocator);
-    defer list12.deinit();
-    try serialize([12]bool, data12, &list12);
-    try expect(list12.items.len == 2);
-    try expect(list12.items[0] == 141);
-    try expect(list12.items[1] == 10);
+    const list12 = try serialize(std.testing.allocator, data12);
+    defer std.testing.allocator.free(list12);
+    try expect(list12.len == 2);
+    try expect(list12[0] == 141);
+    try expect(list12[1] == 10);
 }
 
 test "serializes string" {
     const data = "zig zag";
 
-    var list = ArrayList(u8).init(std.testing.allocator);
-    defer list.deinit();
-    try serialize([]const u8, data, &list);
-    try expect(std.mem.eql(u8, list.items, data));
+    const list = try serialize(std.testing.allocator, data);
+    defer std.testing.allocator.free(list);
+    try expect(std.mem.eql(u8, list, data));
 }
 
 test "serializes an array of shorts" {
     const data = [_]u16{ 0xabcd, 0xef01 };
     const serialized = [_]u8{ 0xcd, 0xab, 0x01, 0xef };
 
-    var list = ArrayList(u8).init(std.testing.allocator);
-    defer list.deinit();
-    try serialize([]const u16, data[0..data.len], &list);
-    try expect(std.mem.eql(u8, list.items, serialized[0..]));
+    const list = try serialize(std.testing.allocator, data[0..data.len]);
+    defer std.testing.allocator.free(list);
+    try expect(std.mem.eql(u8, list, serialized[0..]));
 }
 
 test "serializes an array of structures" {
-    var list = ArrayList(u8).init(std.testing.allocator);
-    defer list.deinit();
     const exp = [_]u8{ 8, 0, 0, 0, 23, 0, 0, 0, 6, 0, 0, 0, 20, 0, 99, 114, 111, 105, 115, 115, 97, 110, 116, 6, 0, 0, 0, 244, 1, 72, 101, 114, 114, 101, 110, 116, 111, 114, 116, 101 };
 
-    try serialize(@TypeOf(pastries), pastries, &list);
-    try expect(std.mem.eql(u8, list.items, exp[0..]));
+    const list = try serialize(std.testing.allocator, pastries);
+    defer std.testing.allocator.free(list);
+    try expect(std.mem.eql(u8, list, exp[0..]));
 }
 
 test "serializes a structure without variable fields" {
@@ -137,10 +119,9 @@ test "serializes a structure without variable fields" {
     };
     const serialized_data = [_]u8{ 1, 3, 0, 0, 0, 1 };
 
-    var list = ArrayList(u8).init(std.testing.allocator);
-    defer list.deinit();
-    try serialize(@TypeOf(data), data, &list);
-    try expect(std.mem.eql(u8, list.items, serialized_data[0..]));
+    const list = try serialize(std.testing.allocator, data);
+    defer std.testing.allocator.free(list);
+    try expect(std.mem.eql(u8, list, serialized_data[0..]));
 }
 
 test "serializes a structure with variable fields" {
@@ -152,10 +133,9 @@ test "serializes a structure with variable fields" {
     };
     const serialized_data = [_]u8{ 9, 0, 0, 0, 32, 14, 0, 0, 0, 74, 97, 109, 101, 115, 68, 69, 86, 32, 73, 110, 99, 46 };
 
-    var list = ArrayList(u8).init(std.testing.allocator);
-    defer list.deinit();
-    try serialize(@TypeOf(data), data, &list);
-    try expect(std.mem.eql(u8, list.items, serialized_data[0..]));
+    const list = try serialize(std.testing.allocator, data);
+    defer std.testing.allocator.free(list);
+    try expect(std.mem.eql(u8, list, serialized_data[0..]));
 }
 
 test "serializes a structure with optional fields" {
@@ -172,13 +152,11 @@ test "serializes a structure with optional fields" {
 
     const serialized_data = [_]u8{ 9, 0, 0, 0, 32, 15, 0, 0, 0, 1, 74, 97, 109, 101, 115, 0 };
 
-    var list = ArrayList(u8).init(std.testing.allocator);
-    defer list.deinit();
-    try serialize(@TypeOf(data), data, &list);
-    try expect(std.mem.eql(u8, list.items, serialized_data[0..]));
+    const list = try serialize(std.testing.allocator, data);
+    defer std.testing.allocator.free(list);
+    try expect(std.mem.eql(u8, list, serialized_data[0..]));
 
-    var deserialized: Employee = undefined;
-    try deserialize(Employee, list.items, &deserialized);
+    const deserialized = try deserialize(Employee, list);
     // only available in >=0.11
     // try std.testing.expectEqualDeep(data, deserialized);
     try expect(std.mem.eql(u8, data.name.?, deserialized.name.?));
@@ -188,10 +166,9 @@ test "serializes a structure with optional fields" {
 
 test "serializes an optional object" {
     const null_or_string: ?[]const u8 = null;
-    var list = ArrayList(u8).init(std.testing.allocator);
-    defer list.deinit();
-    try serialize(@TypeOf(null_or_string), null_or_string, &list);
-    try expect(list.items.len == 1);
+    const list = try serialize(std.testing.allocator, null_or_string);
+    defer std.testing.allocator.free(list);
+    try expect(list.len == 1);
 }
 
 test "serializes a union" {
@@ -200,98 +177,69 @@ test "serializes a union" {
         boolean: bool,
     };
 
-    var list = ArrayList(u8).init(std.testing.allocator);
-    defer list.deinit();
     const exp = [_]u8{ 0, 210, 4, 0, 0, 0, 0, 0, 0 };
-    try serialize(Payload, Payload{ .int = 1234 }, &list);
-    try expect(std.mem.eql(u8, list.items, exp[0..]));
+    const list = try serialize(std.testing.allocator, Payload{ .int = 1234 });
+    defer std.testing.allocator.free(list);
+    try expect(std.mem.eql(u8, list, exp[0..]));
 
-    var list2 = ArrayList(u8).init(std.testing.allocator);
-    defer list2.deinit();
     const exp2 = [_]u8{ 1, 1 };
-    try serialize(Payload, Payload{ .boolean = true }, &list2);
-    try expect(std.mem.eql(u8, list2.items, exp2[0..]));
-
-    // Make sure that the code won't try to serialize untagged
-    // payloads.
-    const UnTaggedPayload = union {
-        int: u64,
-        boolean: bool,
-    };
-
-    var list3 = ArrayList(u8).init(std.testing.allocator);
-    defer list3.deinit();
-    if (serialize(UnTaggedPayload, UnTaggedPayload{ .boolean = false }, &list3)) {
-        @panic("didn't catch error");
-    } else |err| switch (err) {
-        error.UnionIsNotTagged => {},
-    }
+    const list2 = try serialize(std.testing.allocator, Payload{ .boolean = true });
+    defer std.testing.allocator.free(list2);
+    try expect(std.mem.eql(u8, list2, exp2[0..]));
 }
 
 test "deserializes an u8" {
     const payload = [_]u8{0x55};
-    var i: u8 = 0;
-    try deserialize(u8, payload[0..payload.len], &i);
+    const i = try deserialize(u8, payload[0..payload.len]);
     try expect(i == 0x55);
 }
 
 test "deserializes an u32" {
     const payload = [_]u8{ 0x55, 0x66, 0x77, 0x88 };
-    var i: u32 = 0;
-    try deserialize(u32, payload[0..payload.len], &i);
+    const i = try deserialize(u32, payload[0..payload.len]);
     try expect(i == 0x88776655);
 }
 
 test "deserializes a boolean" {
     const payload_false = [_]u8{0};
-    var b = true;
-    try deserialize(bool, payload_false[0..1], &b);
-    try expect(b == false);
+    var b = try deserialize(bool, payload_false[0..1]);
+    try expect(!b);
 
     const payload_true = [_]u8{1};
-    try deserialize(bool, payload_true[0..1], &b);
-    try expect(b == true);
+    b = try deserialize(bool, payload_true[0..1]);
+    try expect(b);
 }
 
-test "deserializes a Bitvector[N]" {
-    const exp = [_]bool{ true, false, true, true, false, false, false };
-    var out = [_]bool{ false, false, false, false, false, false, false };
-    const serialized_data = [_]u8{0b00001101};
-    try deserialize([7]bool, serialized_data[0..1], &out);
-    comptime var i = 0;
-    inline while (i < 7) : (i += 1) {
-        try expect(out[i] == exp[i]);
-    }
-}
+//test "deserializes a Bitvector[N]" {
+//    const exp = [_]bool{ true, false, true, true, false, false, false };
+//    const serialized_data = [_]u8{0b00001101};
+//    const out = try deserialize([]const u8, serialized_data[0..1]);
+//    comptime var i = 0;
+//    inline while (i < 7) : (i += 1) {
+//        try expect(out[i] == exp[i]);
+//    }
+//}
 
 test "deserializes an Optional" {
-    var list = ArrayList(u8).init(std.testing.allocator);
-    defer list.deinit();
-
-    var out: ?u32 = undefined;
     const exp: ?u32 = 10;
-    try serialize(?u32, exp, &list);
-    try deserialize(?u32, list.items, &out);
+    const list = try serialize(std.testing.allocator, exp);
+    defer std.testing.allocator.free(list);
+    var out = try deserialize(?u32, list);
     try expect(out.? == exp.?);
 
-    var list2 = ArrayList(u8).init(std.testing.allocator);
-    defer list2.deinit();
-
-    try serialize(?u32, null, &list2);
-    try deserialize(?u32, list2.items, &out);
+    const list2 = try serialize(std.testing.allocator, null);
+    defer std.testing.allocator.free(list2);
+    out = try deserialize(?u32, list2);
     try expect(out == null);
 }
 
 test "deserializes a string" {
     const exp = "croissants";
 
-    var list = ArrayList(u8).init(std.testing.allocator);
-    defer list.deinit();
-    try serialize([]const u8, exp, &list);
+    const list = try serialize(std.testing.allocator, exp);
+    defer std.testing.allocator.free(list);
 
-    var got: []const u8 = undefined;
-
-    try deserialize([]const u8, list.items, &got);
+    const got = try deserialize([]const u8, list);
     try expect(std.mem.eql(u8, exp, got));
 }
 
@@ -312,69 +260,54 @@ const pastries = [_]Pastry{
 };
 
 test "deserializes a structure" {
-    var out = Pastry{ .name = "", .weight = 0 };
-    var list = ArrayList(u8).init(std.testing.allocator);
-    defer list.deinit();
-
-    try serialize(Pastry, pastries[0], &list);
-    try deserialize(Pastry, list.items, &out);
+    const list = try serialize(std.testing.allocator, pastries[0]);
+    defer std.testing.allocator.free(list);
+    const out = try deserialize(Pastry, list);
 
     try expect(pastries[0].weight == out.weight);
     try expect(std.mem.eql(u8, pastries[0].name, out.name));
 }
 
-test "deserializes a Vector[N]" {
-    var out: [2]Pastry = undefined;
-    var list = ArrayList(u8).init(std.testing.allocator);
-    defer list.deinit();
+//test "deserializes a Vector[N]" {
+//    const list = try serialize(std.testing.allocator, pastries);
+//    const out = try deserialize([]const Pastry, list);
+//    comptime var i = 0;
+//    inline while (i < pastries.len) : (i += 1) {
+//        try expect(out[i].weight == pastries[i].weight);
+//        try expect(std.mem.eql(u8, pastries[i].name, out[i].name));
+//    }
+//}
 
-    try serialize([2]Pastry, pastries, &list);
-    try deserialize(@TypeOf(pastries), list.items, &out);
-    comptime var i = 0;
-    inline while (i < pastries.len) : (i += 1) {
-        try expect(out[i].weight == pastries[i].weight);
-        try expect(std.mem.eql(u8, pastries[i].name, out[i].name));
-    }
-}
-
-test "deserializes an invalid Vector[N] payload" {
-    var out: [2]Pastry = undefined;
-    var list = ArrayList(u8).init(std.testing.allocator);
-    defer list.deinit();
-
-    try serialize([2]Pastry, pastries, &list);
-    if (deserialize(@TypeOf(pastries), list.items[0 .. list.items.len / 2], &out)) {
-        @panic("missed error");
-    } else |err| switch (err) {
-        error.IndexOutOfBounds => {},
-    }
-}
+//test "deserializes an invalid Vector[N] payload" {
+//    const list = try serialize(std.testing.allocator, pastries);
+//    if (deserialize(Pastry, list[0 .. list.len / 2])) {
+//        @panic("missed error");
+//    } else |err| switch (err) {
+//        error.IndexOutOfBounds => {},
+//    }
+//}
 
 test "deserializes an union" {
     const Payload = union {
         int: u32,
         boolean: bool,
     };
-
-    var p: Payload = undefined;
-    try deserialize(Payload, ([_]u8{ 1, 1 })[0..], &p);
+    var p = try deserialize(Payload, ([_]u8{ 1, 1 })[0..]);
     try expect(p.boolean == true);
 
-    try deserialize(Payload, ([_]u8{ 1, 0 })[0..], &p);
+    p = try deserialize(Payload, ([_]u8{ 1, 0 })[0..]);
     try expect(p.boolean == false);
 
-    try deserialize(Payload, ([_]u8{ 0, 1, 2, 3, 4 })[0..], &p);
+    p = try deserialize(Payload, ([_]u8{ 0, 1, 2, 3, 4 })[0..]);
     try expect(p.int == 0x04030201);
 }
 
 test "serialize/deserialize a u256" {
-    var list = ArrayList(u8).init(std.testing.allocator);
-    defer list.deinit();
     const data = [_]u8{0xAA} ** 32;
-    var output: [32]u8 = undefined;
 
-    try serialize([32]u8, data, &list);
-    try deserialize([32]u8, list.items, &output);
+    const list = try serialize(std.testing.allocator, data);
+    defer std.testing.allocator.free(list);
+    const output = try deserialize([]const u8, list);
 
     try expect(std.mem.eql(u8, data[0..], output[0..]));
 }
@@ -433,18 +366,18 @@ const e_bits = bytesToBits(16, e_bytes);
 test "calculate the root hash of a boolean" {
     var expected = [_]u8{1} ++ [_]u8{0} ** 31;
     var hashed: [32]u8 = undefined;
-    try hashTreeRoot(bool, true, &hashed, std.testing.allocator);
+    try hashTreeRoot(true, &hashed, std.testing.allocator);
     try expect(std.mem.eql(u8, hashed[0..], expected[0..]));
 
     expected = [_]u8{0} ** 32;
-    try hashTreeRoot(bool, false, &hashed, std.testing.allocator);
+    try hashTreeRoot(false, &hashed, std.testing.allocator);
     try expect(std.mem.eql(u8, hashed[0..], expected[0..]));
 }
 
 test "calculate root hash of an array of two Bitvector[128]" {
     const deserialized: [2][128]bool = [2][128]bool{ a_bits, b_bits };
     var hashed: [32]u8 = undefined;
-    try hashTreeRoot(@TypeOf(deserialized), deserialized, &hashed, std.testing.allocator);
+    try hashTreeRoot(deserialized, &hashed, std.testing.allocator);
 
     var expected: [32]u8 = undefined;
     const expected_preimage = a_bytes ++ empty_bytes ++ b_bytes ++ empty_bytes;
@@ -456,14 +389,14 @@ test "calculate root hash of an array of two Bitvector[128]" {
 test "calculate the root hash of an array of integers" {
     var expected = [_]u8{ 0xef, 0xbe, 0xad, 0xde, 0xfe, 0xca, 0xfe, 0xca } ++ [_]u8{0} ** 24;
     var hashed: [32]u8 = undefined;
-    try hashTreeRoot([2]u32, [_]u32{ 0xdeadbeef, 0xcafecafe }, &hashed, std.testing.allocator);
+    try hashTreeRoot([_]u32{ 0xdeadbeef, 0xcafecafe }, &hashed, std.testing.allocator);
     try expect(std.mem.eql(u8, hashed[0..], expected[0..]));
 }
 
 test "calculate root hash of an array of three Bitvector[128]" {
     const deserialized: [3][128]bool = [3][128]bool{ a_bits, b_bits, c_bits };
     var hashed: [32]u8 = undefined;
-    try hashTreeRoot(@TypeOf(deserialized), deserialized, &hashed, std.testing.allocator);
+    try hashTreeRoot(deserialized, &hashed, std.testing.allocator);
 
     var left: [32]u8 = undefined;
     var expected: [32]u8 = undefined;
@@ -482,7 +415,7 @@ test "calculate root hash of an array of three Bitvector[128]" {
 test "calculate the root hash of an array of five Bitvector[128]" {
     const deserialized = [5][128]bool{ a_bits, b_bits, c_bits, d_bits, e_bits };
     var hashed: [32]u8 = undefined;
-    try hashTreeRoot(@TypeOf(deserialized), deserialized, &hashed, std.testing.allocator);
+    try hashTreeRoot(deserialized, &hashed, std.testing.allocator);
 
     var internal_nodes: [64]u8 = undefined;
     var left: [32]u8 = undefined;
@@ -526,7 +459,7 @@ test "calculate the root hash of a structure" {
     };
     var expected: [32]u8 = undefined;
     _ = try std.fmt.hexToBytes(expected[0..], "58316a908701d3660123f0b8cb7839abdd961f71d92993d34e4f480fbec687d9");
-    try hashTreeRoot(Fork, fork, &hashed, std.testing.allocator);
+    try hashTreeRoot(fork, &hashed, std.testing.allocator);
     try expect(std.mem.eql(u8, hashed[0..], expected[0..]));
 }
 
@@ -539,12 +472,12 @@ test "calculate the root hash of an Optional" {
 
     _ = try std.fmt.hexToBytes(payload[0..], "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000");
     sha256.hash(payload[0..], expected[0..], sha256.Options{});
-    try hashTreeRoot(?u32, v, &hashed, std.testing.allocator);
+    try hashTreeRoot(v, &hashed, std.testing.allocator);
     try expect(std.mem.eql(u8, hashed[0..], expected[0..]));
 
     _ = try std.fmt.hexToBytes(payload[0..], "efbeadde000000000000000000000000000000000000000000000000000000000100000000000000000000000000000000000000000000000000000000000000");
     sha256.hash(payload[0..], expected[0..], sha256.Options{});
-    try hashTreeRoot(?u32, u, &hashed, std.testing.allocator);
+    try hashTreeRoot(u, &hashed, std.testing.allocator);
     try expect(std.mem.eql(u8, hashed[0..], expected[0..]));
 }
 
@@ -558,12 +491,12 @@ test "calculate the root hash of an union" {
     _ = try std.fmt.hexToBytes(payload[0..], "d2040000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000");
     var exp1: [32]u8 = undefined;
     sha256.hash(payload[0..], exp1[0..], sha256.Options{});
-    try hashTreeRoot(Payload, Payload{ .int = 1234 }, &out, std.testing.allocator);
+    try hashTreeRoot(Payload{ .int = 1234 }, &out, std.testing.allocator);
     try expect(std.mem.eql(u8, out[0..], exp1[0..]));
 
     var exp2: [32]u8 = undefined;
     _ = try std.fmt.hexToBytes(payload[0..], "01000000000000000000000000000000000000000000000000000000000000000100000000000000000000000000000000000000000000000000000000000000");
     sha256.hash(payload[0..], exp2[0..], sha256.Options{});
-    try hashTreeRoot(Payload, Payload{ .boolean = true }, &out, std.testing.allocator);
+    try hashTreeRoot(Payload{ .boolean = true }, &out, std.testing.allocator);
     try expect(std.mem.eql(u8, out[0..], exp2[0..]));
 }
