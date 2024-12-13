@@ -2,9 +2,9 @@ name: Lint and test
 
 on:
   push:
-    branches: [ master ]
+    branches: [ main ]
   pull_request:
-    branches: [ master ]
+    branches: [ main ]
 
 jobs:
 
@@ -16,7 +16,7 @@ jobs:
     - name: Set up Zig
       uses: korandoru/setup-zig@v1
       with:
-        zig-version: 0.13.0
+        zig-version: v0.14.0-dev.2051+b1361f237
 
     - name: Build
       run: zig build
@@ -29,7 +29,7 @@ jobs:
     - name: Set up Zig
       uses: korandoru/setup-zig@v1
       with:
-        zig-version: 0.13.0
+        zig-version: v0.14.0-dev.2051+b1361f237
 
     - name: Lint
       run: zig fmt --check src/*.zig
@@ -42,7 +42,7 @@ jobs:
     - name: Set up Zig
       uses: korandoru/setup-zig@v1
       with:
-        zig-version: 0.13.0
+        zig-version: v0.14.0-dev.2051+b1361f237
 
     - name: Test
       run: zig build test --summary all
